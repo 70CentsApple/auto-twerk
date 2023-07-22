@@ -1,0 +1,7 @@
+{
+  "autotwerk.feedback.on": "§a启用§r 自动蹲起!",
+  "autotwerk.feedback.off": "§c禁用§r 自动蹲起!",
+  "autotwerk.feedback.interval": "蹲起间隔被设置成 %d 刻!",
+  "autotwerk.text.toggle": "切换自动蹲起",
+  "autotwerk.text.category_title": "自动蹲起"
+}

@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "id": "${id}",
+  "version": "${version}",
+
+  "name": "${name}",
+  "description": "Sneak and unsneak all the time!",
+  "authors": [
+    "70CentsApple"
+  ],
+  "contact": {
+    "homepage": "https://modrinth.com/mod/auto-twerk",
+    "sources": "https://github.com/70CentsApple/auto-twerk",
+    "issues": "https://github.com/70CentsApple/auto-twerk/issues",
+    "bilibili": "https://space.bilibili.com/442361724"
+  },
+
+  "license": "GPL-3.0",
+  "icon": "assets/auto_twerk/icon.png",
+
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "net.apple70cents.auto_twerk.AutoTwerk"
+    ]
+  },
+  "mixins": [
+    "auto_twerk.mixins.json"
+  ],
+
+  "depends": {
+    "fabricloader": ">=0.11.4",
+    "minecraft": "${minecraft_dependency}"
+  }
+}
