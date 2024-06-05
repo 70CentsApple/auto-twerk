@@ -1,6 +1,5 @@
 apply plugin: 'maven-publish'
 apply plugin: 'fabric-loom'
-apply plugin: 'io.github.juuxel.loom-quiltflower'
 apply plugin: 'com.replaymod.preprocess'
 apply plugin: 'me.fallenbreath.yamlang'
 
@@ -47,7 +46,10 @@ remapJar {
 	remapperIsolation = true
 }
 
-if (mcVersion >= 11800) {
+if (mcVersion >= 1_20_05) {
+	sourceCompatibility = JavaVersion.VERSION_21
+	targetCompatibility = JavaVersion.VERSION_21
+} else if (mcVersion >= 11800) {
 	sourceCompatibility = JavaVersion.VERSION_17
 	targetCompatibility = JavaVersion.VERSION_17
 } else if (mcVersion >= 11700) {
@@ -100,7 +102,7 @@ tasks.withType(JavaCompile).configureEach {
 java {
 	// Loom will automatically attach sourcesJar to a RemapSourcesJar task and to the "build" task
 	// if it is present.
-	// If you remove this line, sources will not be generated.
+	// With this line commented, sources jar will not be built.
 	// withSourcesJar()
 }
 
