@@ -1,31 +1,82 @@
 name: build
-on: [pull_request, push]
+on: [ pull_request, push ]
 
 jobs:
-  build:
+  commit-checker:
+    runs-on: ubuntu-latest
+    outputs:
+      skip_build: ${{ steps.check.outputs.skip_build }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check commit message
+        id: check
+        run: |
+          commit_message=$(git log -1 --pretty=%B)
+          echo "Commit message: $commit_message"
+          if [[ "$commit_message" == *"[skip ci]"* ]]; then
+            echo "Skipping CI..."
+            echo "skip_build=true" >> $GITHUB_OUTPUT
+          else
+            echo "Confirming CI..."
+            echo "skip_build=false" >> $GITHUB_OUTPUT
+          fi
+
+  build-and-summary:
+    needs: commit-checker
+    if: needs.commit-checker.outputs.skip_build == 'false'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up JDK ${{ matrix.java-version }}
+      - name: Set up JDK 25
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: 21
+          java-version: 25
+          cache: 'gradle'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
 
       - name: Build with gradle
         run: |
           chmod +x gradlew
           echo "Building..."
-          ./gradlew build
+
+          # retry a few times — transient maven failures are not unusual on CI
+          MAX_RETRIES=3
+          RETRY_DELAY=10
+
+          count=0
+          success=false
+          while [ $count -lt $MAX_RETRIES ]; do
+            if ./gradlew buildAndGather --no-daemon; then
+              success=true
+              break
+            fi
+            count=$((count+1))
+            echo "⚠️ Build failed. Attempt $count of $MAX_RETRIES..."
+            if [ $count -lt $MAX_RETRIES ]; then
+              echo "Waiting $RETRY_DELAY seconds before retrying..."
+              sleep $RETRY_DELAY
+            fi
+          done
+          if [ "$success" = false ]; then
+            echo "❌ Build failed after $MAX_RETRIES attempts."
+            exit 1
+          fi
         env:
           BUILD_ID: ${{ github.run_number }}
           BUILD_RELEASE: false
 
       - name: Gather artifacts
         run: |
-          mkdir gathered-artifacts
-          cp -r versions/*/build/libs/* gathered-artifacts/
+          mkdir -p gathered-artifacts
+          # buildAndGather drops jars under build/libs/v<mod_version>/
+          find build/libs -type f -name '*.jar' -exec mv -t gathered-artifacts {} +
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -33,21 +84,8 @@ jobs:
           name: Artifacts
           path: gathered-artifacts
 
-  summary:
-    runs-on: ubuntu-22.04
-    needs:
-      - build
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: Artifacts
-          path: gathered-artifacts
-
-      - name: Make build summary
-        run: python3 .github/workflows/scripts/summary.py  # ubuntu-22.04 uses Python 3.10.6
+      - name: Generate summary
+        run: python3 .github/workflows/scripts/summary.py
         env:
-          TARGET_SUBPROJECT: '' # leaving this empty means all subprojects
+          TARGET_SUBPROJECT: ''  # empty = include every subproject
+          ARTIFACTS_DIR: gathered-artifacts

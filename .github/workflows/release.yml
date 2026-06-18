@@ -1,0 +1,228 @@
+name: Release to Modrinth and GitHub
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-and-github-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: 25
+          cache: 'gradle'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+
+      - name: Build with gradle
+        run: |
+          chmod +x gradlew
+          MAX_RETRIES=3
+          RETRY_DELAY=10
+          count=0
+          success=false
+          while [ $count -lt $MAX_RETRIES ]; do
+            if ./gradlew buildAndGather --no-daemon; then
+              success=true
+              break
+            fi
+            count=$((count+1))
+            echo "⚠️ Build failed. Attempt $count of $MAX_RETRIES..."
+            if [ $count -lt $MAX_RETRIES ]; then
+              sleep $RETRY_DELAY
+            fi
+          done
+          if [ "$success" = false ]; then
+            echo "❌ Build failed after $MAX_RETRIES attempts."
+            exit 1
+          fi
+        env:
+          BUILD_ID: ${{ github.run_number }}
+          BUILD_RELEASE: true
+
+      - name: Gather artifacts
+        run: |
+          mkdir -p gathered-artifacts
+          find build/libs -type f -name '*.jar' -exec mv -t gathered-artifacts {} +
+
+      - name: Generate summary
+        run: python3 .github/workflows/scripts/summary.py
+        env:
+          TARGET_SUBPROJECT: ''
+          ARTIFACTS_DIR: gathered-artifacts
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Artifacts
+          path: gathered-artifacts
+
+      - name: Get variables
+        run: |
+          raw_file_paths=$(ls ./gathered-artifacts/*)
+          file_paths=${raw_file_paths//$'\n'/,}
+          echo "file_paths=${file_paths}" >> $GITHUB_ENV
+
+          raw_tag_name=${GITHUB_REF#refs/tags/}
+          tag_name=${raw_tag_name#v}
+          echo "tag_name=${tag_name}" >> $GITHUB_ENV
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          repository: 70CentsApple/auto-twerk
+          tag_name: "v${{ env.tag_name }}"
+          name: "v${{ env.tag_name }}"
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: ${{ env.file_paths }}
+
+      - name: Fetch Release Notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Fetching release notes from GitHub..."
+          gh release view "v${{ env.tag_name }}" --repo ${{ github.repository }} --json body --jq '.body' > release_notes.md
+
+      - name: Upload Release Notes
+        uses: actions/upload-artifact@v4
+        with:
+          name: Release Notes
+          path: release_notes.md
+
+  modrinth-release:
+    needs:
+      - build-and-github-release
+    runs-on: ubuntu-latest
+    strategy:
+      # ensure uploads happen sequentially — Modrinth dislikes parallel writes for the same project
+      max-parallel: 1
+      matrix:
+        include:
+          # --- 26.x ---
+          - artifact: "26.2-fabric"
+            target_game_versions: "26.2"
+            formatted_version_name: "26.2"
+            modloader: "fabric"
+
+          - artifact: "26.2-neoforge"
+            target_game_versions: "26.2"
+            formatted_version_name: "26.2"
+            modloader: "neoforge"
+
+          - artifact: "26.1.2-fabric"
+            target_game_versions: "26.1,26.1.1,26.1.2"
+            formatted_version_name: "26.1(.x)"
+            modloader: "fabric"
+
+          - artifact: "26.1.2-neoforge"
+            target_game_versions: "26.1,26.1.1,26.1.2"
+            formatted_version_name: "26.1(.x)"
+            modloader: "neoforge"
+
+          # --- 1.21.x ---
+          - artifact: "1.21.11-fabric"
+            target_game_versions: "1.21.11"
+            formatted_version_name: "1.21.11"
+            modloader: "fabric"
+
+          - artifact: "1.21.11-neoforge"
+            target_game_versions: "1.21.11"
+            formatted_version_name: "1.21.11"
+            modloader: "neoforge"
+
+          - artifact: "1.21.1-fabric"
+            target_game_versions: "1.21,1.21.1"
+            formatted_version_name: "1.21(.1)"
+            modloader: "fabric"
+
+          - artifact: "1.21.1-neoforge"
+            target_game_versions: "1.21,1.21.1"
+            formatted_version_name: "1.21(.1)"
+            modloader: "neoforge"
+
+          # --- 1.20.x ---
+          - artifact: "1.20.1-fabric"
+            target_game_versions: "1.20,1.20.1"
+            formatted_version_name: "1.20(.1)"
+            modloader: "fabric"
+
+          # --- 1.19.x, 1.18.x, 1.17.x, 1.16.x ---
+          - artifact: "1.19.4-fabric"
+            target_game_versions: "1.19,1.19.1,1.19.2,1.19.3,1.19.4"
+            formatted_version_name: "1.19.x"
+            modloader: "fabric"
+
+          - artifact: "1.18.2-fabric"
+            target_game_versions: "1.18,1.18.1,1.18.2"
+            formatted_version_name: "1.18.x"
+            modloader: "fabric"
+
+          - artifact: "1.17.1-fabric"
+            target_game_versions: "1.17,1.17.1"
+            formatted_version_name: "1.17.x"
+            modloader: "fabric"
+
+          - artifact: "1.16.5-fabric"
+            target_game_versions: "1.16,1.16.1,1.16.2,1.16.3,1.16.4,1.16.5"
+            formatted_version_name: "1.16.x"
+            modloader: "fabric"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Artifacts (JARs)
+        uses: actions/download-artifact@v4
+        with:
+          name: Artifacts
+          path: gathered-artifacts
+
+      - name: Download Release Notes
+        uses: actions/download-artifact@v4
+        with:
+          name: Release Notes
+          path: gathered-artifacts
+
+      - name: Resolve file path and changelog
+        run: |
+          file_path=$(ls gathered-artifacts/*${{ matrix.artifact }}*.jar)
+          echo "file_path=${file_path}" >> $GITHUB_ENV
+          echo "file_path for this version is: $file_path"
+
+          raw_tag_name=${GITHUB_REF#refs/tags/}
+          tag_name=${raw_tag_name#v}
+          echo "tag_name=${tag_name}" >> $GITHUB_ENV
+
+          changelog=$(cat gathered-artifacts/release_notes.md)
+          echo "changelog<<EOF" >> $GITHUB_ENV
+          echo "${changelog}" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+      # https://github.com/marketplace/actions/upload-to-modrinth
+      - name: Upload to Modrinth
+        uses: RubixDev/modrinth-upload@v1
+        with:
+          token: ${{ secrets.MODRINTH_TOKEN }}
+          file_path: ${{ env.file_path }}
+          name: "v${{ env.tag_name }}+${{ matrix.formatted_version_name }}+${{ matrix.modloader }}"
+          version: "${{ env.tag_name }}+${{ matrix.formatted_version_name }}-${{ matrix.modloader }}"
+          changelog: ${{ env.changelog }}
+          game_versions: ${{ matrix.target_game_versions }}
+          release_type: "release"
+          loaders: "${{ matrix.modloader }}"
+          featured: false
+          project_id: "SsUJxcog"

@@ -1,47 +1,131 @@
 plugins {
     id 'maven-publish'
-    id 'fabric-loom' version '1.6-SNAPSHOT' apply false
-
-    // https://github.com/ReplayMod/preprocessor
-    // https://github.com/Fallen-Breath/preprocessor
-    id 'com.replaymod.preprocess' version 'ce1aeb2b'
-
-    // https://github.com/Fallen-Breath/yamlang
-    id 'me.fallenbreath.yamlang' version '1.3.1'
+    id 'dev.architectury.loom' version '1.14-SNAPSHOT' apply false
+    id 'dev.architectury.loom-no-remap' version '1.14-SNAPSHOT' apply false
 }
 
-preprocess {
-    def mc116 = createNode('1.16.5', 1_16_05, 'yarn')
-    def mc117 = createNode('1.17.1', 1_17_01, 'yarn')
-    def mc118 = createNode('1.18.2', 1_18_02, 'yarn')
-    def mc119 = createNode('1.19.4', 1_19_04, 'yarn')
-    def mc120 = createNode('1.20.1', 1_20_01, 'yarn')
-    def mc121 = createNode('1.21', 1_21_00, 'yarn')
-
-    mc116.link(mc117, null)
-    mc117.link(mc118, null)
-    mc118.link(mc119, null)
-    mc119.link(mc120, null)
-    mc120.link(mc121, null)
+def noRemap = sc.current.parsed.matches('>=26.1')
+if (noRemap) {
+    apply plugin: 'dev.architectury.loom-no-remap'
+} else {
+    apply plugin: 'dev.architectury.loom'
 }
 
-tasks.register('buildAndGather') {
-    group("build")
-    subprojects {
-        dependsOn project.tasks.named('build').get()
-    }
-    doFirst {
-        println "Gathering builds"
-        copy {
-            subprojects {
-                def libDir = project.projectDir.toPath().resolve("build/libs")
-                from(libDir) {
-                    include "*.jar"
-                    exclude "*-dev.jar", "*-sources.jar"
-                }
-                into "build/libs/"
-                duplicatesStrategy DuplicatesStrategy.INCLUDE
+def mod_brand = (loom.platform.get() as String).toLowerCase()
+assert mod_brand in ['fabric', 'neoforge']
+assert sc.current.project.endsWith('-' + mod_brand)
+
+repositories {
+    maven { url = "https://maven.terraformersmc.com/releases/" }
+    maven { url = "https://maven.shedaniel.me/" }
+    maven { url = 'https://maven.parchmentmc.org' }
+    maven { url = 'https://maven.neoforged.net/releases' }
+}
+
+// https://github.com/FabricMC/fabric-loader/issues/783
+if (!noRemap) {
+    configurations {
+        if (mod_brand == 'fabric') {
+            modApi {
+                exclude group: 'net.fabricmc', module: 'fabric-loader'
             }
         }
+    }
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+
+    if (!noRemap) {
+        mappings loom.layered() {
+            officialMojangMappings()
+            if (project.hasProperty('parchment_version') && project.parchment_version.size() > 0) {
+                parchment("org.parchmentmc.data:parchment-${project.minecraft_version}:${project.parchment_version}@zip")
+            }
+        }
+    }
+
+    if (mod_brand == 'fabric') {
+        if (noRemap) {
+            implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+            if (project.findProperty('fabric_api_version')?.toString()?.size() > 0) {
+                implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+            }
+        } else {
+            modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+            if (project.findProperty('fabric_api_version')?.toString()?.size() > 0) {
+                modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+            }
+        }
+    } else if (mod_brand == 'neoforge') {
+        neoForge "net.neoforged:neoforge:${project.neoforge_version}"
+    }
+}
+
+loom {
+    runs {
+        client {
+            ideConfigGenerated = true
+            runDir '../../run'
+            vmArgs '-Dmixin.debug.export=true'
+        }
+    }
+}
+
+JavaVersion JAVA_COMPATIBILITY =
+        sc.current.parsed.matches('>=26.1') ? JavaVersion.VERSION_25 :
+                sc.current.parsed.matches('>=1.20.5') ? JavaVersion.VERSION_21 :
+                        sc.current.parsed.matches('>=1.18') ? JavaVersion.VERSION_17 :
+                                sc.current.parsed.matches('>=1.17') ? JavaVersion.VERSION_16 :
+                                        JavaVersion.VERSION_1_8
+
+java {
+    sourceCompatibility = JAVA_COMPATIBILITY
+    targetCompatibility = JAVA_COMPATIBILITY
+}
+
+version = 'v' + project.mod_version + '+' + project.minecraft_version + '-' + mod_brand
+group = project.maven_group
+base.archivesName = project.archives_base_name
+
+processResources {
+    def modProperties = [
+            "id"                  : project.mod_id,
+            "name"                : project.mod_name,
+            "version"             : project.mod_version,
+            "minecraft_dependency": project.minecraft_dependency,
+    ]
+    inputs.properties(modProperties)
+
+    def good_files = [] as Set
+    def all_files = [] as Set
+    [
+            'fabric'  : ['fabric.mod.json'],
+            'neoforge': ['META-INF', 'META-INF/neoforge.mods.toml', 'pack.mcmeta'],
+    ].forEach { brand, paths ->
+        all_files.addAll(paths)
+        if (brand == mod_brand) {
+            good_files.addAll(paths)
+        }
+    }
+    all_files.forEach { it2 ->
+        def path = it2 as String
+        if (good_files.contains(path)) {
+            filesMatching(path) {
+                expand modProperties
+            }
+        } else {
+            exclude path
+        }
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = "UTF-8"
+}
+
+jar {
+    from(rootProject.file('LICENSE')) {
+        rename { "${it}_${project.archives_base_name}" }
     }
 }

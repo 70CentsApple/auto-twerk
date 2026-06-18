@@ -13,11 +13,11 @@ import os
 
 
 def read_prop(file_name: str, key: str) -> str:
-	with open(file_name, 'r') as prop:
-		return next(filter(
-			lambda l: l.split('=', 1)[0].strip() == key,
-			prop.readlines()
-		)).split('=', 1)[1].lstrip()
+    with open(file_name, 'r') as prop:
+        return next(filter(
+            lambda l: l.split('=', 1)[0].strip() == key,
+            prop.readlines()
+        )).split('=', 1)[1].lstrip()
 
 
 def get_sha256_hash(file_path: str) -> str:
@@ -27,18 +27,24 @@ def get_sha256_hash(file_path: str) -> str:
             sha256_hash.update(buf)
     return sha256_hash.hexdigest()
 
+
 def main():
     MOD_VERSION = read_prop('gradle.properties', 'mod_version')
     print(f'Current mod version: {MOD_VERSION}')
     target_subproject_env = os.environ.get('TARGET_SUBPROJECT', '')
     target_subprojects = list(filter(None, target_subproject_env.split(',') if target_subproject_env != '' else []))
     print(f'target_subprojects: {target_subprojects}')
+    artifacts_dir = os.environ.get('ARTIFACTS_DIR', 'gathered-artifacts')
+    summary_title = os.environ.get('SUMMARY_TITLE', '## 🍏 Build Artifacts Summary 🍏')
+    append_summary = os.environ.get('SUMMARY_APPEND', 'false').lower() == 'true'
+    print(f'artifacts_dir: {artifacts_dir}')
+    print(f'append_summary: {append_summary}')
 
     with open('settings.json') as f:
         settings: dict = json.load(f)
 
-    with open(os.environ['GITHUB_STEP_SUMMARY'], 'w') as f:
-        f.write('## 🍎 Build Artifacts Summary 🍎\n\n')
+    with open(os.environ['GITHUB_STEP_SUMMARY'], 'a' if append_summary else 'w') as f:
+        f.write(f'{summary_title}\n\n')
         f.write('| Subproject | File | Size | SHA-256 |\n')
         f.write('| --- | --- | --- | --- |\n')
 
@@ -48,9 +54,8 @@ def main():
             if len(target_subprojects) > 0 and subproject not in target_subprojects:
                 print(f'- Skipping {subproject}')
                 continue
-            # file_paths = glob.glob(f'/build/libs/{MOD_VERSION}/*{subproject}*.jar')
-            file_paths = glob.glob(f'gathered-artifacts/*{subproject}*.jar')
-            file_paths = list(filter(lambda fp: not fp.endswith('-sources.jar') and not fp.endswith('-dev.jar') and not fp.endswith('-shadow.jar'), file_paths))
+            file_paths = glob.glob(f'{artifacts_dir}/*+{subproject}*.jar')
+            file_paths = list(filter(lambda fp: not any(fp.endswith(e) for e in ['-sources.jar', '-dev.jar', '-shadow.jar']), file_paths))
             if len(file_paths) == 0:
                 file_name = '*NOT FOUND*'
                 file_size = '*N/A*'

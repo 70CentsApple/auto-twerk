@@ -12,7 +12,13 @@ import java.io.FileWriter;
  * @author 70CentsApple
  */
 public class ModConfig {
-    private static final File file = new File(net.fabricmc.loader.api.FabricLoader.getInstance().getConfigDir().toFile(), "auto_twerk.json");
+    private static final File file = new File(
+//? if FABRIC {
+            /*net.fabricmc.loader.api.FabricLoader.getInstance().getConfigDir()
+*///?} elif NEOFORGE {
+            net.neoforged.fml.loading.FMLPaths.CONFIGDIR.get()
+//?}
+            .toFile(), "auto_twerk.json");
 
     public static File getFile() {
         return file;

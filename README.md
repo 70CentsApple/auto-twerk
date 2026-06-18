@@ -10,7 +10,8 @@ You can toggle it by pressing the key you bound.
 ## Commands
 - `/autotwerk on` Turn on the mod | 开启自动蹲起
 - `/autotwerk off` Turn off the mod | 关闭自动蹲起
-- `/autotwerk interval {value}` Set interval between sneaks | 设置蹲起间隔
+- `/autotwerk toggle` Flip the on/off state | 切换开关
+- `/autotwerk setinterval {value}` Set interval between sneaks | 设置蹲起间隔
 
 One picture is worth a thousand words.
 
