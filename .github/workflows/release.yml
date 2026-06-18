@@ -13,70 +13,39 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up JDK
-        uses: actions/setup-java@v4
+      - name: Build
+        uses: ./.github/actions/build_artifacts/
         with:
-          distribution: 'temurin'
-          java-version: 25
-          cache: 'gradle'
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          cache-read-only: false
-
-      - name: Build with gradle
-        run: |
-          chmod +x gradlew
-          MAX_RETRIES=3
-          RETRY_DELAY=10
-          count=0
-          success=false
-          while [ $count -lt $MAX_RETRIES ]; do
-            if ./gradlew buildAndGather --no-daemon; then
-              success=true
-              break
-            fi
-            count=$((count+1))
-            echo "⚠️ Build failed. Attempt $count of $MAX_RETRIES..."
-            if [ $count -lt $MAX_RETRIES ]; then
-              sleep $RETRY_DELAY
-            fi
-          done
-          if [ "$success" = false ]; then
-            echo "❌ Build failed after $MAX_RETRIES attempts."
-            exit 1
-          fi
-        env:
-          BUILD_ID: ${{ github.run_number }}
-          BUILD_RELEASE: true
-
-      - name: Gather artifacts
-        run: |
-          mkdir -p gathered-artifacts
-          find build/libs -type f -name '*.jar' -exec mv -t gathered-artifacts {} +
+          build_release: 'true'
 
       - name: Generate summary
-        run: python3 .github/workflows/scripts/summary.py
-        env:
-          TARGET_SUBPROJECT: ''
-          ARTIFACTS_DIR: gathered-artifacts
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: Artifacts
-          path: gathered-artifacts
+        uses: ./.github/actions/summary/
 
       - name: Get variables
         run: |
           raw_file_paths=$(ls ./gathered-artifacts/*)
+          # adds line breaks
           file_paths=${raw_file_paths//$'\n'/,}
           echo "file_paths=${file_paths}" >> $GITHUB_ENV
 
           raw_tag_name=${GITHUB_REF#refs/tags/}
+          # removes the 'v' prefix
           tag_name=${raw_tag_name#v}
           echo "tag_name=${tag_name}" >> $GITHUB_ENV
+
+          # CHANGELOG.md is optional — fall back to auto-generated notes if absent
+          if [ -f CHANGELOG.md ]; then
+            echo "Using CHANGELOG.md as release body"
+            echo "has_changelog=true" >> $GITHUB_ENV
+            changelog=$(cat CHANGELOG.md)
+            echo "changelog<<EOF" >> $GITHUB_ENV
+            echo "${changelog}" >> $GITHUB_ENV
+            echo "EOF" >> $GITHUB_ENV
+          else
+            echo "No CHANGELOG.md — relying on auto-generated release notes"
+            echo "has_changelog=false" >> $GITHUB_ENV
+            echo "changelog=" >> $GITHUB_ENV
+          fi
 
       - name: Create GitHub Release
         id: create_release
@@ -86,8 +55,11 @@ jobs:
           repository: 70CentsApple/auto-twerk
           tag_name: "v${{ env.tag_name }}"
           name: "v${{ env.tag_name }}"
+          body: ${{ env.changelog }}
           draft: false
           prerelease: false
+          # append auto-generated notes; when CHANGELOG.md is missing, body is empty
+          # and the auto-generated notes become the entire body
           generate_release_notes: true
           files: ${{ env.file_paths }}
 
@@ -207,6 +179,8 @@ jobs:
           tag_name=${raw_tag_name#v}
           echo "tag_name=${tag_name}" >> $GITHUB_ENV
 
+          # release_notes.md was fetched from the GitHub release, which already
+          # merges CHANGELOG.md (if any) with auto-generated notes
           changelog=$(cat gathered-artifacts/release_notes.md)
           echo "changelog<<EOF" >> $GITHUB_ENV
           echo "${changelog}" >> $GITHUB_ENV

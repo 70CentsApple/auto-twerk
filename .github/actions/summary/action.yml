@@ -1,0 +1,21 @@
+name: Summary
+description: download artifacts and generate the build summary table
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@v4
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: Artifacts
+        path: gathered-artifacts
+
+    - name: Make build summary
+      run: python3 .github/workflows/scripts/summary.py  # ubuntu-latest ships Python 3.10+
+      shell: bash
+      env:
+        TARGET_SUBPROJECT: ''  # empty = include every subproject
+        ARTIFACTS_DIR: gathered-artifacts
+        SUMMARY_TITLE: '## 🍏 Build Artifacts Summary 🍏'
+        SUMMARY_APPEND: 'false'
