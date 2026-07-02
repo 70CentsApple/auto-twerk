@@ -108,29 +108,29 @@ jobs:
 
           # --- 1.21.x ---
           - artifact: "1.21.11-fabric"
-            target_game_versions: "1.21.11"
-            formatted_version_name: "1.21.11"
+            target_game_versions: "1.21.9,1.21.10,1.21.11"
+            formatted_version_name: "1.21.9(.10,11)"
             modloader: "fabric"
 
           - artifact: "1.21.11-neoforge"
-            target_game_versions: "1.21.11"
-            formatted_version_name: "1.21.11"
+            target_game_versions: "1.21.9,1.21.10,1.21.11"
+            formatted_version_name: "1.21.9(.10,11)"
             modloader: "neoforge"
 
           - artifact: "1.21.1-fabric"
-            target_game_versions: "1.21,1.21.1"
-            formatted_version_name: "1.21(.1)"
+            target_game_versions: "1.21,1.21.1,1.21.2,1.21.3,1.21.4,1.21.5,1.21.6,1.21.7,1.21.8"
+            formatted_version_name: "1.21(.1,2,3,4,5,6,7,8)"
             modloader: "fabric"
 
           - artifact: "1.21.1-neoforge"
-            target_game_versions: "1.21,1.21.1"
-            formatted_version_name: "1.21(.1)"
+            target_game_versions: "1.21,1.21.1,1.21.2,1.21.3,1.21.4,1.21.5,1.21.6,1.21.7,1.21.8"
+            formatted_version_name: "1.21(.1,2,3,4,5,6,7,8)"
             modloader: "neoforge"
 
           # --- 1.20.x ---
           - artifact: "1.20.1-fabric"
-            target_game_versions: "1.20,1.20.1"
-            formatted_version_name: "1.20(.1)"
+            target_game_versions: "1.20,1.20.1,1.20.2,1.20.3,1.20.4,1.20.5,1.20.6"
+            formatted_version_name: "1.20.x"
             modloader: "fabric"
 
           # --- 1.19.x, 1.18.x, 1.17.x, 1.16.x ---
