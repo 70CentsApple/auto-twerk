@@ -28,6 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: gradle/actions/wrapper-validation@v6
 
       - name: Build
         uses: ./.github/actions/build_artifacts/
